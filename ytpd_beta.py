@@ -47,6 +47,10 @@ class UiMainWindow(object):
         self.url_load_button = QtWidgets.QPushButton(self.centralwidget)
         self.url_load_button.setGeometry(QtCore.QRect(370, 100, 71, 23))
         self.url_load_button.setObjectName("url_load_button")
+        # Turbo setting - concurrent.futures
+        self.turbo_enable = QtWidgets.QCheckBox(self.centralwidget)
+        self.turbo_enable.setGeometry(QtCore.QRect(530, 350, 62, 20))
+        self.turbo_enable.setObjectName("turbo_enable")
         # Remove from QList buton
         self.remove_from_list_button = QtWidgets.QPushButton(self.centralwidget)
         self.remove_from_list_button.setGeometry(QtCore.QRect(670, 350, 131, 23))
@@ -170,6 +174,7 @@ class UiMainWindow(object):
         self.enter_playlist_url_label.setText(_translate("MainWindow", "Enter playlist url:"))
         self.url_load_button.setText(_translate("MainWindow", "Load"))
         self.remove_from_list_button.setText(_translate("MainWindow", "Remove from list"))
+        self.turbo_enable.setText(_translate("MainWindow", "Turbo"))
         self.url_error_label.setText(_translate("MainWindow", "Could not retrieve data from url." +
                                                 " Check the link and try again?"))
         self.url_fetching_data_label.setText(_translate("MainWindow", "Fetching data ... This might take a while."))

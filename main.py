@@ -1,10 +1,11 @@
 import sys
+import os
+import concurrent.futures
 import youtube_dl
 from pytube import YouTube
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import *
 from ytpd_beta import UiMainWindow
-import os
 
 
 def seconds_to_mmss(seconds):
@@ -21,41 +22,6 @@ def seconds_to_mmss(seconds):
     else:
         sec_str = str(sec)
     return min_str + ":" + sec_str
-
-
-class DownloadingVideos(QThread):
-    """ Download all videos from the videos_dict using the id, todo fix some bugs"""
-    downloadCount = pyqtSignal(int, int, bool, str)  # downloaded, number_of_videos, finished
-
-    def __init__(self, videos_dict, download_path, parent=None):
-        QThread.__init__(self, parent)
-        self.videos_dict = videos_dict
-        self.yt_link_starter = "https://www.youtube.com/watch?v="
-        self.download_path = download_path
-
-    def run(self):
-        """ Main function, downloads videos by their id while emitting progress data"""
-        # Create download folder before downloading
-        if not os.path.isdir(self.download_path):  # if path doesn't exist, create one.
-            os.mkdir(self.download_path)
-        # Download
-        number_of_videos = len(self.videos_dict)
-        failed_download = list()
-        downloaded, now_downloading, finished = 0, "", False
-        for key, value in self.videos_dict.items():
-            full_link = self.yt_link_starter + self.videos_dict[key]["id"]
-            try:
-                video = YouTube(full_link)
-                stream = video.streams.filter(only_audio=True, audio_codec="mp4a.40.2").first()
-                stream.download(self.download_path)
-            except:
-                failed_download.append(key)
-            downloaded += 1
-            now_downloading = key
-            if downloaded == number_of_videos:
-                finished = True
-            self.downloadCount.emit(downloaded, number_of_videos, finished, now_downloading)
-        print("Unable to download: ", failed_download)
 
 
 class UrlLoading(QThread):
@@ -142,7 +108,7 @@ class MainPage(QMainWindow, UiMainWindow):
         """ Executes when the button is clicked """
         self.progressBar.show()
         self.download_button.setEnabled(False)
-        self.down = DownloadingVideos(self.videos_dict, self.download_full_path)  # Pass in the dict
+        self.down = DownloadingVideos(self.videos_dict, self.download_full_path, self.turbo_enable)  # Pass in the dict
         self.down.downloadCount.connect(self.downloading_update)  # connect with the download function
         self.down.start()
 
@@ -189,6 +155,92 @@ class MainPage(QMainWindow, UiMainWindow):
         self.download_full_path = self.current_path + "\\" + self.download_folder_name
         self.download_path_label.setText("Download path: {}".format(self.download_full_path))
 
+
+class DownloadingVideos(QThread):
+    """ Download all videos from the videos_dict using the id, todo fix some bugs"""
+    downloadCount = pyqtSignal(int, int, bool, str)  # downloaded, number_of_videos, finished
+
+    def __init__(self, videos_dict, download_path, turbo_bool, parent=None):
+        QThread.__init__(self, parent)
+        self.videos_dict = videos_dict
+        self.yt_link_starter = "https://www.youtube.com/watch?v="
+        self.download_path = download_path
+        self.turbo_bool = turbo_bool
+
+    def run(self):
+        """ Main function, downloads videos by their id while emitting progress data"""
+        # Create download folder before downloading
+        if not os.path.isdir(self.download_path):  # if path doesn't exist, create one.
+            os.mkdir(self.download_path)
+        # Download
+        number_of_videos = len(self.videos_dict)
+        failed_download = list()
+        downloaded, now_downloading, finished = 0, "", False
+        if self.turbo_bool.isChecked(): # futures work
+            print('yes')  # works fine
+            # x = [i for i in range(50)]
+            # test_dict = {i: j for i in range(10) for j in range(10)}
+            concurrent_args = ((
+                key,
+                self.yt_link_starter,
+                value,
+                self.download_path) for key, value in self.videos_dict.items())
+            _futures_processes(test_sum, concurrent_args)
+        # for key, value in self.videos_dict.items():
+        #     full_link = self.yt_link_starter + self.videos_dict[key]["id"]
+        #     try:
+        #         video = YouTube(full_link)
+        #         stream = video.streams.filter(only_audio=True, audio_codec="mp4a.40.2").first()
+        #         stream.download(self.download_path)
+        #     except:
+        #         failed_download.append(key)
+        #     downloaded += 1
+        #     now_downloading = key
+        #     if downloaded == number_of_videos:
+        #         finished = True
+        #     self.downloadCount.emit(downloaded, number_of_videos, finished, now_downloading)
+        # print("Unable to download: ", failed_download)
+
+        # import time
+        # print(f"processing {key_value}, {type(key_value)}")
+        # time.sleep(1)
+        # return key_value
+
+
+def _futures_processes(transform, iterable):
+    import time
+    with concurrent.futures.ProcessPoolExecutor() as executor:  # a bunch of executors in this futures class
+        executor.map(transform, iterable)  # again, a functional programming paradigm using map method
+
+        # for item in executor.map(transform, iterable):
+        #     print(item)
+        #     time.sleep(1)
+
+    # return result
+
+
+def test_sum(args):
+    # NOTE: this must have no relation to any self obj
+    # print(f"{args} :: \n{item}\t" for item in args)
+    # print(args,'\n')
+    key_value = args[0]
+    yt_link_starter = args[1]
+    videos_dict = args[2]
+    download_path = args[3]
+    # print(key_value)
+    # print(self.videos_dict[key_value]["id"])
+    full_link = yt_link_starter + videos_dict['id']
+    print(full_link)
+    try:
+        video = YouTube(full_link)
+        stream = video.streams.filter(only_audio=True, audio_codec="mp4a.40.2").first()
+        stream.download(download_path)
+    except:
+        pass
+        # failed_download.append(key)
+    # finally:
+    #     return
+    # return args
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

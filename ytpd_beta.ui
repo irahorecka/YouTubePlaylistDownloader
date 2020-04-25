@@ -324,6 +324,11 @@
      <string>Created by: Liam Mislej, source files available at githublink</string>
     </property>
    </widget>
+   <widget class="QCheckBox" name="checkBox">
+    <property name="text">
+     <string>Turbo</string>
+    </property>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
@@ -331,7 +336,7 @@
      <x>0</x>
      <y>0</y>
      <width>827</width>
-     <height>21</height>
+     <height>22</height>
     </rect>
    </property>
   </widget>

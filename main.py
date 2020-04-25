@@ -181,11 +181,14 @@ class DownloadingVideos(QThread):
             # x = [i for i in range(50)]
             # test_dict = {i: j for i in range(10) for j in range(10)}
             concurrent_args = ((
-                key,
+                (key, value),
                 self.yt_link_starter,
-                value,
                 self.download_path) for key, value in self.videos_dict.items())
-            _futures_processes(test_sum, concurrent_args)
+            streams = _futures_processes(test_sum, concurrent_args)
+        # for i in streams:
+        #     i.download(self.download_path)
+        # (stream.download(self.download_path) for stream in list(streams))
+        # print('downloaded**')
         # for key, value in self.videos_dict.items():
         #     full_link = self.yt_link_starter + self.videos_dict[key]["id"]
         #     try:
@@ -210,8 +213,8 @@ class DownloadingVideos(QThread):
 def _futures_processes(transform, iterable):
     import time
     with concurrent.futures.ProcessPoolExecutor() as executor:  # a bunch of executors in this futures class
-        executor.map(transform, iterable)  # again, a functional programming paradigm using map method
-
+        streams = executor.map(transform, iterable)  # again, a functional programming paradigm using map method
+    return streams
         # for item in executor.map(transform, iterable):
         #     print(item)
         #     time.sleep(1)
@@ -223,10 +226,9 @@ def test_sum(args):
     # NOTE: this must have no relation to any self obj
     # print(f"{args} :: \n{item}\t" for item in args)
     # print(args,'\n')
-    key_value = args[0]
+    key_value, videos_dict = args[0]
     yt_link_starter = args[1]
-    videos_dict = args[2]
-    download_path = args[3]
+    download_path = args[2]
     # print(key_value)
     # print(self.videos_dict[key_value]["id"])
     full_link = yt_link_starter + videos_dict['id']
@@ -235,6 +237,8 @@ def test_sum(args):
         video = YouTube(full_link)
         stream = video.streams.filter(only_audio=True, audio_codec="mp4a.40.2").first()
         stream.download(download_path)
+        print('passed download', key_value, videos_dict) # actually it looks like it works...!!!
+        return
     except:
         pass
         # failed_download.append(key)

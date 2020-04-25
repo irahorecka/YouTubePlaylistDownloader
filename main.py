@@ -1,5 +1,6 @@
-import sys
 import os
+import sys
+import time
 import concurrent.futures
 import youtube_dl
 from pytube import YouTube
@@ -112,20 +113,21 @@ class MainPage(QMainWindow, UiMainWindow):
         self.down.downloadCount.connect(self.downloading_update)  # connect with the download function
         self.down.start()
 
-    def downloading_update(self, downloaded, number_of_videos, finished, now_downloading):  # int, bool
+    def downloading_update(self, seconds):  # int, bool
         """ Executes as it receives signals from thread """
+        self.downloaded_label.setText(seconds)
         # Update the progressBar, calculate the perc. here
-        downloaded_percentages = int(round((downloaded / number_of_videos) * 100))
-        self.progressBar.setProperty("value", downloaded_percentages)
-        # Changing the downloaded label
-        if finished:
-            self.download_button.setEnabled(True)
-            self.progressBar.hide()
-            self.downloaded_label.setText("Finished. {} files saved to:\n {}".format(downloaded, self.download_full_path))
-            self.progressBar.setProperty("value", 0)  # reset loading bar
-        else:
-            self.downloaded_label.setText("{}\nDownloaded {} out of {}.".format(now_downloading, downloaded,
-                                                                                number_of_videos))
+        # downloaded_percentages = int(round((downloaded / number_of_videos) * 100))
+        # self.progressBar.setProperty("value", downloaded_percentages)
+        # # Changing the downloaded label
+        # if finished:
+        #     self.download_button.setEnabled(True)
+        #     self.progressBar.hide()
+            
+        #     self.progressBar.setProperty("value", 0)  # reset loading bar
+        # else:
+        #     self.downloaded_label.setText("{}\nDownloaded {} out of {}.".format(now_downloading, downloaded,
+        #                                                                         number_of_videos))
 
 # Items videos from videos(of playlist) list
 
@@ -158,7 +160,7 @@ class MainPage(QMainWindow, UiMainWindow):
 
 class DownloadingVideos(QThread):
     """ Download all videos from the videos_dict using the id, todo fix some bugs"""
-    downloadCount = pyqtSignal(int, int, bool, str)  # downloaded, number_of_videos, finished
+    downloadCount = pyqtSignal(str)  # downloaded, number_of_videos, finished
 
     def __init__(self, videos_dict, download_path, turbo_bool, parent=None):
         QThread.__init__(self, parent)
@@ -176,63 +178,48 @@ class DownloadingVideos(QThread):
         number_of_videos = len(self.videos_dict)
         failed_download = list()
         downloaded, now_downloading, finished = 0, "", False
-        if self.turbo_bool.isChecked(): # futures work
-            print('yes')  # works fine
-            # x = [i for i in range(50)]
-            # test_dict = {i: j for i in range(10) for j in range(10)}
+        time0 = time.time()
+
+        # run multithread?
+        if self.turbo_bool.isChecked(): # enable futures
             concurrent_args = ((
                 (key, value),
                 self.yt_link_starter,
                 self.download_path) for key, value in self.videos_dict.items())
-            streams = _futures_processes(test_sum, concurrent_args)
-        # for i in streams:
-        #     i.download(self.download_path)
-        # (stream.download(self.download_path) for stream in list(streams))
-        # print('downloaded**')
-        # for key, value in self.videos_dict.items():
-        #     full_link = self.yt_link_starter + self.videos_dict[key]["id"]
-        #     try:
-        #         video = YouTube(full_link)
-        #         stream = video.streams.filter(only_audio=True, audio_codec="mp4a.40.2").first()
-        #         stream.download(self.download_path)
-        #     except:
-        #         failed_download.append(key)
-        #     downloaded += 1
-        #     now_downloading = key
-        #     if downloaded == number_of_videos:
-        #         finished = True
-        #     self.downloadCount.emit(downloaded, number_of_videos, finished, now_downloading)
-        # print("Unable to download: ", failed_download)
+            streams = _futures_processes(thread_download, concurrent_args)
+            time1 = time.time()
 
-        # import time
-        # print(f"processing {key_value}, {type(key_value)}")
-        # time.sleep(1)
-        # return key_value
+        else:
+            for key, value in self.videos_dict.items():
+                full_link = self.yt_link_starter + self.videos_dict[key]["id"]
+                try:
+                    video = YouTube(full_link)
+                    stream = video.streams.filter(only_audio=True, audio_codec="mp4a.40.2").first()
+                    stream.download(self.download_path)
+                except:
+                    failed_download.append(key)
+            print("Unable to download: ", failed_download)
+
+            time1 = time.time()
+
+        delta_t = time1 - time0
+        self.downloadCount.emit(f"Download time: {'%.2f' % delta_t} seconds")
 
 
 def _futures_processes(transform, iterable):
     import time
-    with concurrent.futures.ProcessPoolExecutor() as executor:  # a bunch of executors in this futures class
-        streams = executor.map(transform, iterable)  # again, a functional programming paradigm using map method
+    with concurrent.futures.ThreadPoolExecutor() as executor:  # a bunch of executors in this futures class
+        streams = executor.map(transform, iterable, timeout=1)  # again, a functional programming paradigm using map method
     return streams
-        # for item in executor.map(transform, iterable):
-        #     print(item)
-        #     time.sleep(1)
-
-    # return result
 
 
-def test_sum(args):
+def thread_download(args):
     # NOTE: this must have no relation to any self obj
-    # print(f"{args} :: \n{item}\t" for item in args)
-    # print(args,'\n')
     key_value, videos_dict = args[0]
     yt_link_starter = args[1]
     download_path = args[2]
-    # print(key_value)
-    # print(self.videos_dict[key_value]["id"])
     full_link = yt_link_starter + videos_dict['id']
-    print(full_link)
+
     try:
         video = YouTube(full_link)
         stream = video.streams.filter(only_audio=True, audio_codec="mp4a.40.2").first()
@@ -241,10 +228,7 @@ def test_sum(args):
         return
     except:
         pass
-        # failed_download.append(key)
-    # finally:
-    #     return
-    # return args
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

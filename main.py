@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 import time
 import concurrent.futures
@@ -6,7 +7,7 @@ import youtube_dl
 from pytube import YouTube
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import *
-from ytpd_beta import UiMainWindow
+from ytpd_beta import Ui_MainWindow as UiMainWindow
 
 
 def seconds_to_mmss(seconds):
@@ -39,7 +40,7 @@ class UrlLoading(QThread):
         videos_dict = dict()
         try:
             with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                playlist_dict = ydl.extract_info(self.playlist_link, download=False)
+                playlist_dict = ydl.extract_info(self.playlist_link, download=False)  # time consuming spot -- cannot thread
                 for video in playlist_dict['entries']:
                     try:
                         title = video.get("title")
@@ -63,17 +64,13 @@ class MainPage(QMainWindow, UiMainWindow):
         # Seting the videos dict. and connecting the delete video button with the remove_selected_items fn.
         self.remove_from_list_button.clicked.connect(self.remove_selected_items)
         self.videos_dict = dict()
-        # Hide progress bar, show it when it starts downloading
-        self.progressBar.hide()
         # Buttons Connection with the appropriate functions
         self.url_load_button.clicked.connect(self.url_loading_button_click)
         self.download_button.clicked.connect(self.download_button_click)
-        self.folder_name_button.clicked.connect(self.select_save_path)
+        self.download_path.clicked.connect(self.get_file_dir)
         # Get the desktop path, set folder name, full download path, set label.
-        self.current_path = os.path.dirname(os.path.abspath(__file__))
-        self.download_folder_name = "YTPD_beta"
-        self.download_full_path = self.current_path + "\\" + self.download_folder_name
-        self.download_path_label.setText("Download path: {}".format(self.download_full_path))
+        self.download_folder_select.setText("Folder: ")
+        self.download_dir = os.path.dirname(os.path.abspath(__file__))  # base no-selection download dir
 
 
 # Input url threading
@@ -103,33 +100,23 @@ class MainPage(QMainWindow, UiMainWindow):
         else:
             self.url_error_label.show()  # Show the error label
 
+    def get_file_dir(self):
+        self.download_dir = QFileDialog.getExistingDirectory(self, 'Open folder', os.path.dirname(os.path.abspath(__file__)))
+        # set nearby names
+        self.download_folder_select.setText("Folder: ../{}".format('/'.join([i for i in self.download_dir.split('/')][-2:])))
+
+
 # Downloading videos threading
 
     def download_button_click(self):
         """ Executes when the button is clicked """
-        self.progressBar.show()
         self.download_button.setEnabled(False)
-        self.down = DownloadingVideos(self.videos_dict, self.download_full_path, self.turbo_enable)  # Pass in the dict
-        self.down.downloadCount.connect(self.downloading_update)  # connect with the download function
+        self.downloaded_label.setText("Downloading...")
+        self.down = DownloadingVideos(self.videos_dict, self.download_dir, self.turbo_enable)  # Pass in the dict
         self.down.start()
+        # TODO: Fix this below -- be able to reflect emission
+        self.downloaded_label = self.down.downloadCount
 
-    def downloading_update(self, seconds):  # int, bool
-        """ Executes as it receives signals from thread """
-        self.downloaded_label.setText(seconds)
-        # Update the progressBar, calculate the perc. here
-        # downloaded_percentages = int(round((downloaded / number_of_videos) * 100))
-        # self.progressBar.setProperty("value", downloaded_percentages)
-        # # Changing the downloaded label
-        # if finished:
-        #     self.download_button.setEnabled(True)
-        #     self.progressBar.hide()
-            
-        #     self.progressBar.setProperty("value", 0)  # reset loading bar
-        # else:
-        #     self.downloaded_label.setText("{}\nDownloaded {} out of {}.".format(now_downloading, downloaded,
-        #                                                                         number_of_videos))
-
-# Items videos from videos(of playlist) list
 
     def remove_selected_items(self):
         """ Removes the selected items from the self.videos_dict and self.list_of_titles
@@ -149,14 +136,6 @@ class MainPage(QMainWindow, UiMainWindow):
                 index += 1
             del self.videos_dict[delete_key]  # delete the actual key
 
-# Getting input from the folder name folder_name_input, creating dir, changing labels
-
-    def select_save_path(self):
-        """ Sets the download path to the input one, auto set to YTPD_beta"""
-        self.download_folder_name = self.folder_name_input.text()
-        self.download_full_path = self.current_path + "\\" + self.download_folder_name
-        self.download_path_label.setText("Download path: {}".format(self.download_full_path))
-
 
 class DownloadingVideos(QThread):
     """ Download all videos from the videos_dict using the id, todo fix some bugs"""
@@ -171,13 +150,11 @@ class DownloadingVideos(QThread):
 
     def run(self):
         """ Main function, downloads videos by their id while emitting progress data"""
-        # Create download folder before downloading
-        if not os.path.isdir(self.download_path):  # if path doesn't exist, create one.
-            os.mkdir(self.download_path)
+
         # Download
         number_of_videos = len(self.videos_dict)
         failed_download = list()
-        downloaded, now_downloading, finished = 0, "", False
+        
         time0 = time.time()
 
         # run multithread?
@@ -186,7 +163,7 @@ class DownloadingVideos(QThread):
                 (key, value),
                 self.yt_link_starter,
                 self.download_path) for key, value in self.videos_dict.items())
-            streams = _futures_processes(thread_download, concurrent_args)
+            streams = _futures_threads(thread_download, concurrent_args)
             time1 = time.time()
 
         else:
@@ -203,10 +180,11 @@ class DownloadingVideos(QThread):
             time1 = time.time()
 
         delta_t = time1 - time0
+        print(delta_t)
         self.downloadCount.emit(f"Download time: {'%.2f' % delta_t} seconds")
 
 
-def _futures_processes(transform, iterable):
+def _futures_threads(transform, iterable):
     import time
     with concurrent.futures.ThreadPoolExecutor() as executor:  # a bunch of executors in this futures class
         streams = executor.map(transform, iterable, timeout=1)  # again, a functional programming paradigm using map method
@@ -224,7 +202,15 @@ def thread_download(args):
         video = YouTube(full_link)
         stream = video.streams.filter(only_audio=True, audio_codec="mp4a.40.2").first()
         stream.download(download_path)
-        print('passed download', key_value, videos_dict) # actually it looks like it works...!!!
+        # convert generated mp4 files to mp3 -- problem with MacOS where mp4 is twice length of video
+        mp4_filename = stream.default_filename  # mp4 full extension
+        mp3_filename = "{}.mp3".format(mp4_filename[:-4])
+        subprocess.call([
+            'ffmpeg',
+            '-i', os.path.join(download_path, mp4_filename),
+            os.path.join(download_path, mp3_filename)
+        ])
+        os.remove(os.path.join(download_path, mp4_filename))  # remove mp4 from dir
         return
     except:
         pass

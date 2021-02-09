@@ -1,4 +1,9 @@
 # YouTube Playlist Downloader
+
+## This repository is archived
+This repository served as a foundation for <a href="https://github.com/irahorecka/youtube2audio">youtube2audio</a> and is no longer maintained.
+
+<hr>
 Simple youtube playlist downloader. 
 It's mostly meant to download music as it only downloads videos in a MP4 format.
 
